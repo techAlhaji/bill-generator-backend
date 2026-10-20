@@ -1,6 +1,12 @@
 node_modules/
+node_modules
+**/node_modules/
+**/node_modules/**
 dist/
+build/
 .env
+.env.local
+.env.*.local
 *.log
 coverage/
 .DS_Store
