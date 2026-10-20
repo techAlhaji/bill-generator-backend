@@ -1,0 +1,1424 @@
+openapi: 3.0.3
+info:
+  title: Stellar Bill Generator — Backend REST API
+  description: |
+    Production-grade REST API specification for the Stellar Bill Generator platform.
+    Features include merchant identity management, client CRM, invoice authoring with integer minor unit math,
+    cryptographic capability token public invoices, RFC 8785 canonical content hashing, and hybrid Stellar L1
+    Horizon and Soroban RPC payment verification.
+  version: 1.0.0
+  contact:
+    name: Stellar Bill Generator Architecture Team
+
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local Development Server
+  - url: https://api-testnet.stellarbills.com/api/v1
+    description: Testnet Staging Server
+
+tags:
+  - name: Health
+    description: System liveness and dependency readiness probes
+  - name: Authentication
+    description: Merchant onboarding and session management (JWT & SEP-10)
+  - name: Merchant Profile
+    description: Merchant organization settings, branding, and Stellar address preferences
+  - name: Clients
+    description: Client directory and billing metadata management
+  - name: Invoices
+    description: Merchant invoice lifecycle, drafting, calculation, and PDF retrieval
+  - name: Public Invoices & Payment
+    description: Unauthenticated capability-token endpoints for payers and payment verification
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness health check
+      description: Returns 200 if the Fastify process is responsive.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Verifies database connectivity and Stellar Horizon / Soroban RPC node availability.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: All dependencies are healthy and ready for traffic.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+                  database:
+                    type: string
+                    example: connected
+                  horizon:
+                    type: string
+                    example: connected
+                  sorobanRpc:
+                    type: string
+                    example: connected
+        '503':
+          description: One or more upstream dependencies are unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new merchant account
+      description: Creates a merchant account with email, password, business name, and Stellar address.
+      operationId: registerMerchant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterMerchantRequest'
+      responses:
+        '201':
+          description: Merchant created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '409':
+          description: Email already registered.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login with email and password
+      description: Authenticates credentials and returns a signed JWT session.
+      operationId: loginMerchant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /auth/stellar-challenge:
+    post:
+      tags: [Authentication]
+      summary: Request SEP-10 authentication challenge
+      description: Generates a cryptographically valid challenge transaction for Web3 wallet authentication.
+      operationId: getStellarChallenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stellarAddress]
+              properties:
+                stellarAddress:
+                  type: string
+                  example: GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEF
+      responses:
+        '200':
+          description: Challenge transaction XDR returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction:
+                    type: string
+                    description: Base64-encoded challenge transaction XDR
+                  networkPassphrase:
+                    type: string
+
+  /auth/stellar-verify:
+    post:
+      tags: [Authentication]
+      summary: Verify signed SEP-10 challenge
+      description: Validates client signature on challenge transaction and issues JWT session.
+      operationId: verifyStellarChallenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signedTransaction]
+              properties:
+                signedTransaction:
+                  type: string
+                  description: Base64-encoded signed challenge transaction XDR
+      responses:
+        '200':
+          description: Signature verified; session token issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /merchant/profile:
+    get:
+      tags: [Merchant Profile]
+      summary: Get authenticated merchant profile
+      security:
+        - BearerAuth: []
+      operationId: getMerchantProfile
+      responses:
+        '200':
+          description: Profile retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+    put:
+      tags: [Merchant Profile]
+      summary: Update merchant profile and preferences
+      security:
+        - BearerAuth: []
+      operationId: updateMerchantProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMerchantProfileRequest'
+      responses:
+        '200':
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /clients:
+    get:
+      tags: [Clients]
+      summary: List clients for authenticated merchant
+      security:
+        - BearerAuth: []
+      operationId: listClients
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive search across name or email
+      responses:
+        '200':
+          description: Paginated list of clients.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClientsEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+    post:
+      tags: [Clients]
+      summary: Create client
+      security:
+        - BearerAuth: []
+      operationId: createClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Client created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Get client details
+      security:
+        - BearerAuth: []
+      operationId: getClientById
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Client found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+    put:
+      tags: [Clients]
+      summary: Update client
+      security:
+        - BearerAuth: []
+      operationId: updateClient
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+      responses:
+        '200':
+          description: Client updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+    delete:
+      tags: [Clients]
+      summary: Delete client
+      security:
+        - BearerAuth: []
+      operationId: deleteClient
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Client deleted.
+        '400':
+          description: Cannot delete client with active invoices.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices with filters and pagination
+      security:
+        - BearerAuth: []
+      operationId: listInvoices
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/InvoiceStatus'
+        - name: clientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: currencyType
+          in: query
+          schema:
+            $ref: '#/components/schemas/CurrencyType'
+      responses:
+        '200':
+          description: Paginated invoice list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvoicesEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+    post:
+      tags: [Invoices]
+      summary: Create new invoice
+      description: Creates draft or directly issued invoice with integer-based line item calculation.
+      security:
+        - BearerAuth: []
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+      responses:
+        '201':
+          description: Invoice created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Get full invoice details
+      security:
+        - BearerAuth: []
+      operationId: getInvoiceById
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Full invoice details including line items and payment status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+    put:
+      tags: [Invoices]
+      summary: Update draft invoice
+      description: Prohibited once invoice has transitioned beyond DRAFT.
+      security:
+        - BearerAuth: []
+      operationId: updateInvoice
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInvoiceRequest'
+      responses:
+        '200':
+          description: Invoice updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceEnvelope'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Cannot update an invoice that has already been issued or paid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /invoices/{id}/issue:
+    post:
+      tags: [Invoices]
+      summary: Issue invoice
+      description: Transitions status from DRAFT to ISSUED, calculates RFC 8785 content hash, and opens public capability URL.
+      security:
+        - BearerAuth: []
+      operationId: issueInvoice
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Invoice issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Invoice is not in DRAFT status.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /invoices/{id}/cancel:
+    post:
+      tags: [Invoices]
+      summary: Cancel invoice
+      description: Renders public payment link void. Prohibited if invoice is already PAID.
+      security:
+        - BearerAuth: []
+      operationId: cancelInvoice
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Invoice cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceEnvelope'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Paid invoices cannot be cancelled.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /invoices/{id}/pdf:
+    get:
+      tags: [Invoices]
+      summary: Download invoice PDF
+      security:
+        - BearerAuth: []
+      operationId: downloadMerchantInvoicePdf
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: PDF binary stream.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /invoices/{id}/payments:
+    get:
+      tags: [Invoices]
+      summary: List payments and verification attempts for an invoice
+      security:
+        - BearerAuth: []
+      operationId: getInvoicePayments
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: List of payment records.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /invoices/{id}/audit-logs:
+    get:
+      tags: [Invoices]
+      summary: Retrieve immutable audit trail for an invoice
+      security:
+        - BearerAuth: []
+      operationId: getInvoiceAuditLogs
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: List of audit log entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /public/invoices/{publicToken}:
+    get:
+      tags: [Public Invoices & Payment]
+      summary: Get sanitized public invoice view
+      description: Accessible without authentication. Returns 404 for DRAFT invoices. Strips private merchant and customer data.
+      operationId: getPublicInvoice
+      parameters:
+        - name: publicToken
+          in: path
+          required: true
+          schema:
+            type: string
+          description: High-entropy capability token
+      responses:
+        '200':
+          description: Sanitized public invoice details and payment instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicInvoiceEnvelope'
+        '404':
+          description: Invoice not found or not yet issued.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /public/invoices/{publicToken}/verify-payment:
+    post:
+      tags: [Public Invoices & Payment]
+      summary: Submit transaction for cryptographic verification
+      description: Direct query to Horizon / Soroban RPC. Verified atomically with database row locking.
+      operationId: verifyPublicPayment
+      parameters:
+        - name: publicToken
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPaymentRequest'
+      responses:
+        '200':
+          description: Payment successfully verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyPaymentSuccessResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '409':
+          description: Transaction hash has already been redeemed for another invoice.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Payment verification failed (e.g. underpaid, wrong recipient, wrong asset).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /public/invoices/{publicToken}/status:
+    get:
+      tags: [Public Invoices & Payment]
+      summary: Poll live invoice payment status
+      description: Lightweight status endpoint designed for frontend UI polling loops.
+      operationId: getPublicInvoiceStatus
+      parameters:
+        - name: publicToken
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current lifecycle status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    $ref: '#/components/schemas/InvoiceStatus'
+                  paidAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  txHash:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+  /public/invoices/{publicToken}/pdf:
+    get:
+      tags: [Public Invoices & Payment]
+      summary: Download public invoice or payment receipt PDF
+      operationId: downloadPublicInvoicePdf
+      parameters:
+        - name: publicToken
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PDF binary stream.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/404NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Standard RFC 6750 JWT bearer token issued upon login.
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: Page number for pagination
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Number of records per page
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID resource identifier
+
+  responses:
+    400BadRequest:
+      description: Invalid request payload or parameter.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    401Unauthorized:
+      description: Missing or expired authentication credentials.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail, instance, code, timestamp]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://errors.stellarbills.com/validation-error
+        title:
+          type: string
+          example: Validation Error
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: Invoice due date cannot precede issue date.
+        instance:
+          type: string
+          example: /api/v1/invoices
+        code:
+          type: string
+          example: INVALID_DUE_DATE
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-10-19T21:50:00Z'
+        invalidParams:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              reason:
+                type: string
+
+    PaginationMeta:
+      type: object
+      required: [page, limit, totalCount, totalPages, hasNextPage, hasPrevPage]
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalCount:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 3
+        hasNextPage:
+          type: boolean
+          example: true
+        hasPrevPage:
+          type: boolean
+          example: false
+
+    InvoiceStatus:
+      type: string
+      enum: [DRAFT, ISSUED, PAID, OVERDUE, CANCELLED]
+      example: ISSUED
+
+    CurrencyType:
+      type: string
+      enum: [NATIVE_XLM, STELLAR_CLASSIC, SOROBAN_TOKEN]
+      example: NATIVE_XLM
+
+    PaymentMethod:
+      type: string
+      enum: [STELLAR_CLASSIC, SOROBAN_TOKEN]
+      example: STELLAR_CLASSIC
+
+    RegisterMerchantRequest:
+      type: object
+      required: [email, password, businessName, stellarAddress]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        businessName:
+          type: string
+          minLength: 2
+        stellarAddress:
+          type: string
+          pattern: '^G[A-Z2-7]{55}$'
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthTokenEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [token, merchant]
+          properties:
+            token:
+              type: string
+              description: Signed JWT access token
+            merchant:
+              $ref: '#/components/schemas/MerchantProfile'
+
+    MerchantProfile:
+      type: object
+      required: [id, email, businessName, stellarAddress, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        businessName:
+          type: string
+        stellarAddress:
+          type: string
+        settings:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MerchantEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/MerchantProfile'
+
+    UpdateMerchantProfileRequest:
+      type: object
+      properties:
+        businessName:
+          type: string
+        stellarAddress:
+          type: string
+          pattern: '^G[A-Z2-7]{55}$'
+        settings:
+          type: object
+
+    Client:
+      type: object
+      required: [id, merchantId, name, email, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+          nullable: true
+        taxId:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ClientEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Client'
+
+    PaginatedClientsEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Client'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreateClientRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        taxId:
+          type: string
+        notes:
+          type: string
+
+    UpdateClientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        taxId:
+          type: string
+        notes:
+          type: string
+
+    InvoiceItemInput:
+      type: object
+      required: [description, quantityScale4, unitPriceMinor]
+      properties:
+        description:
+          type: string
+        quantityScale4:
+          type: string
+          description: Quantity scaled by 10^4 as string integer (e.g. "10000" = 1.0000)
+          example: '10000'
+        unitPriceMinor:
+          type: string
+          description: Unit price in integer minor units (e.g. cents or stroops)
+          example: '5000000'
+
+    InvoiceItem:
+      type: object
+      required: [id, description, quantityScale4, unitPriceMinor, totalMinor, sortOrder]
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        quantityScale4:
+          type: string
+        unitPriceMinor:
+          type: string
+        totalMinor:
+          type: string
+        sortOrder:
+          type: integer
+
+    CreateInvoiceRequest:
+      type: object
+      required: [clientId, currencyType, issueDate, dueDate, items]
+      properties:
+        clientId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+          description: Optional custom invoice number. Auto-generated if omitted.
+        currencyType:
+          $ref: '#/components/schemas/CurrencyType'
+        assetCode:
+          type: string
+          default: XLM
+        assetIssuer:
+          type: string
+        tokenContractId:
+          type: string
+        taxRateBps:
+          type: integer
+          default: 0
+          description: Tax rate in basis points (1% = 100 bps)
+        discountMinor:
+          type: string
+          default: '0'
+        notes:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InvoiceItemInput'
+
+    UpdateInvoiceRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          format: uuid
+        currencyType:
+          $ref: '#/components/schemas/CurrencyType'
+        assetCode:
+          type: string
+        assetIssuer:
+          type: string
+        tokenContractId:
+          type: string
+        taxRateBps:
+          type: integer
+        discountMinor:
+          type: string
+        notes:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InvoiceItemInput'
+
+    Invoice:
+      type: object
+      required:
+        - id
+        - merchantId
+        - clientId
+        - invoiceNumber
+        - publicToken
+        - status
+        - currencyType
+        - assetCode
+        - subtotalMinor
+        - taxRateBps
+        - taxMinor
+        - discountMinor
+        - totalMinor
+        - amountStroops
+        - memoText
+        - contentHash
+        - issueDate
+        - dueDate
+        - items
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchantId:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          format: uuid
+        client:
+          $ref: '#/components/schemas/Client'
+        invoiceNumber:
+          type: string
+          example: INV-2026-0001
+        publicToken:
+          type: string
+          example: pub_a1b2c3d4e5f6...
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        currencyType:
+          $ref: '#/components/schemas/CurrencyType'
+        assetCode:
+          type: string
+        assetIssuer:
+          type: string
+          nullable: true
+        tokenContractId:
+          type: string
+          nullable: true
+        subtotalMinor:
+          type: string
+        taxRateBps:
+          type: integer
+        taxMinor:
+          type: string
+        discountMinor:
+          type: string
+        totalMinor:
+          type: string
+        amountStroops:
+          type: string
+        memoText:
+          type: string
+        contentHash:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        onchainInvoiceId:
+          type: string
+          nullable: true
+        onchainTxHash:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceItem'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InvoiceEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Invoice'
+
+    PaginatedInvoicesEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PublicInvoice:
+      type: object
+      required:
+        - invoiceNumber
+        - status
+        - merchantBusinessName
+        - merchantStellarAddress
+        - clientName
+        - currencyType
+        - assetCode
+        - subtotalMinor
+        - taxRateBps
+        - taxMinor
+        - discountMinor
+        - totalMinor
+        - amountStroops
+        - memoText
+        - contentHash
+        - issueDate
+        - dueDate
+        - items
+      properties:
+        invoiceNumber:
+          type: string
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        merchantBusinessName:
+          type: string
+        merchantStellarAddress:
+          type: string
+        clientName:
+          type: string
+        currencyType:
+          $ref: '#/components/schemas/CurrencyType'
+        assetCode:
+          type: string
+        assetIssuer:
+          type: string
+          nullable: true
+        tokenContractId:
+          type: string
+          nullable: true
+        subtotalMinor:
+          type: string
+        taxRateBps:
+          type: integer
+        taxMinor:
+          type: string
+        discountMinor:
+          type: string
+        totalMinor:
+          type: string
+        amountStroops:
+          type: string
+        memoText:
+          type: string
+        contentHash:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        onchainTxHash:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              quantityScale4:
+                type: string
+              unitPriceMinor:
+                type: string
+              totalMinor:
+                type: string
+
+    PublicInvoiceEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PublicInvoice'
+
+    VerifyPaymentRequest:
+      type: object
+      required: [transactionHash, paymentMethod]
+      properties:
+        transactionHash:
+          type: string
+          pattern: '^[0-9a-fA-F]{64}$'
+          example: 3389e9f1680a379f3d15c48111ec8b4576978160b41fa1433065a636304b295a
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        payerWalletAddress:
+          type: string
+          example: GABC...
+
+    VerifyPaymentSuccessResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, invoiceStatus, transactionHash, verifiedAt]
+          properties:
+            status:
+              type: string
+              example: CONFIRMED
+            invoiceStatus:
+              $ref: '#/components/schemas/InvoiceStatus'
+            transactionHash:
+              type: string
+            amountStroops:
+              type: string
+            excessStroops:
+              type: string
+            verifiedAt:
+              type: string
+              format: date-time
+
+    Payment:
+      type: object
+      required: [id, invoiceId, txHash, paymentMethod, payerAddress, recipientAddress, amountStroops, status, verifiedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        txHash:
+          type: string
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        payerAddress:
+          type: string
+        recipientAddress:
+          type: string
+        assetIdentifier:
+          type: string
+        amountStroops:
+          type: string
+        excessStroops:
+          type: string
+        ledgerSequence:
+          type: integer
+        status:
+          type: string
+          enum: [CONFIRMED, UNDERPAID, REJECTED]
+        failureReason:
+          type: string
+          nullable: true
+        verifiedAt:
+          type: string
+          format: date-time
+
+    AuditLog:
+      type: object
+      required: [id, invoiceId, action, actorType, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        fromStatus:
+          type: string
+          nullable: true
+        toStatus:
+          type: string
+          nullable: true
+        actorType:
+          type: string
+          enum: [MERCHANT, SYSTEM, PAYER]
+        actorId:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
