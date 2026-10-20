@@ -1,0 +1,59 @@
+{
+  "name": "bill-generator-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Production REST API for Stellar Bill Generator",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "billing",
+    "invoicing",
+    "payments",
+    "fastify",
+    "typescript"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/jwt": "^9.0.4",
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.2",
+    "@prisma/client": "^5.22.0",
+    "@stellar/stellar-sdk": "^13.0.0",
+    "bcryptjs": "^2.4.3",
+    "canonicalize": "^2.0.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "pdfkit": "^0.16.0",
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.13.4",
+    "@types/pdfkit": "^0.13.9",
+    "@types/supertest": "^6.0.2",
+    "pino-pretty": "^13.0.0",
+    "prisma": "^5.22.0",
+    "rimraf": "^6.0.1",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

@@ -1,0 +1,151 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum CurrencyType {
+  NATIVE_XLM
+  STELLAR_CLASSIC
+  SOROBAN_TOKEN
+}
+
+enum PaymentMethod {
+  STELLAR_CLASSIC
+  SOROBAN_TOKEN
+}
+
+enum PaymentStatus {
+  CONFIRMED
+  UNDERPAID
+  REJECTED
+}
+
+model Merchant {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique
+  passwordHash   String
+  businessName   String
+  stellarAddress String
+  settings       Json      @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  clients        Client[]
+  invoices       Invoice[]
+
+  @@map("merchants")
+}
+
+model Client {
+  id           String    @id @default(uuid()) @db.Uuid
+  merchantId   String    @db.Uuid
+  merchant     Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name         String
+  email        String
+  address      String?
+  taxId        String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  invoices     Invoice[]
+
+  @@map("clients")
+}
+
+model Invoice {
+  id               String         @id @default(uuid()) @db.Uuid
+  merchantId       String         @db.Uuid
+  merchant         Merchant       @relation(fields: [merchantId], references: [id])
+  clientId         String         @db.Uuid
+  client           Client         @relation(fields: [clientId], references: [id])
+  invoiceNumber    String
+  publicToken      String         @unique
+  status           InvoiceStatus  @default(DRAFT)
+  currencyType     CurrencyType   @default(NATIVE_XLM)
+  assetCode        String         @default("XLM")
+  assetIssuer      String?
+  tokenContractId  String?
+  subtotalMinor    BigInt
+  taxRateBps       Int            @default(0)
+  taxMinor         BigInt         @default(0)
+  discountMinor    BigInt         @default(0)
+  totalMinor       BigInt
+  amountStroops    BigInt
+  memoText         String
+  notes            String?
+  contentHash      String
+  issueDate        DateTime       @db.Date
+  dueDate          DateTime       @db.Date
+  paidAt           DateTime?
+  onchainInvoiceId String?
+  onchainTxHash    String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  items            InvoiceItem[]
+  payments         Payment[]
+  auditLogs        AuditLog[]
+
+  @@unique([merchantId, invoiceNumber])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  invoiceId       String   @db.Uuid
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description     String
+  quantityScale4  BigInt   // e.g. 1 unit = 10000n
+  unitPriceMinor  BigInt
+  totalMinor      BigInt
+  sortOrder       Int      @default(0)
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id               String        @id @default(uuid()) @db.Uuid
+  invoiceId        String        @db.Uuid
+  invoice          Invoice       @relation(fields: [invoiceId], references: [id])
+  txHash           String        @unique
+  paymentMethod    PaymentMethod
+  payerAddress     String
+  recipientAddress String
+  assetIdentifier  String
+  amountStroops    BigInt
+  excessStroops    BigInt        @default(0)
+  ledgerSequence   Int
+  status           PaymentStatus @default(CONFIRMED)
+  failureReason    String?
+  verifiedAt       DateTime      @default(now())
+
+  @@index([payerAddress])
+  @@map("payments")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  invoiceId  String   @db.Uuid
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  action     String
+  fromStatus String?
+  toStatus   String?
+  actorType  String
+  actorId    String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}

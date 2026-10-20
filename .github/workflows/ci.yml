@@ -1,0 +1,67 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build, Migrate & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bill_generator
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bill_generator?schema=public
+
+      - name: Run Prisma Migrations
+        run: npm run prisma:deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bill_generator?schema=public
+
+      - name: Build TypeScript code
+        run: npm run build
+
+      - name: Run automated tests
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bill_generator?schema=public
+          JWT_SECRET: super-secret-jwt-key-for-continuous-integration-min-32-chars
+          JWT_EXPIRES_IN: 7d
+          NODE_ENV: test
+          STELLAR_NETWORK: TESTNET
+          STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+          HORIZON_URL: https://horizon-testnet.stellar.org
+          SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          INVOICE_REGISTRY_CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          SERVER_SIGNER_SECRET_KEY: SC6WBWPGSIELKLKKRCY5GOIIF3JIJTS2GDKSJD7K6M6MHR3G3RI7EXYP
