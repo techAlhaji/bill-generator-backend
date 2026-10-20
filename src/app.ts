@@ -20,12 +20,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function buildApp(): Promise<FastifyInstance> {
-  const app = Fastify({
-    logger: env.NODE_ENV === 'test' ? false : (logger as any),
-  });
+  const app = Fastify(
+    env.NODE_ENV === 'test'
+      ? { logger: false }
+      : { loggerInstance: logger }
+  );
 
   // 1. Centralized Error Handler
   app.setErrorHandler(errorHandler);
+
+  // Content type parser: allow empty JSON bodies for parameterless POST/PUT requests
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      return done(null, {});
+    }
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err: any) {
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  });
 
   // 2. Security Plugins
   await app.register(helmet, {

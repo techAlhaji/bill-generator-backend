@@ -207,6 +207,20 @@ export function errorHandler(error: FastifyError | Error, req: FastifyRequest, r
     return reply.status(429).type('application/problem+json').send(payload);
   }
 
+  // Handle other 4xx Client Errors (e.g. Fastify body parsing or bad requests)
+  if ('statusCode' in error && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500) {
+    const payload: ProblemDetailsPayload = {
+      type: 'https://errors.stellarbills.com/bad-request',
+      title: error.name || 'Bad Request',
+      status: error.statusCode,
+      detail: error.message || 'The request could not be processed due to a client error.',
+      instance,
+      code: (error as any).code || 'BAD_REQUEST',
+      timestamp,
+    };
+    return reply.status(error.statusCode).type('application/problem+json').send(payload);
+  }
+
   // Log unhandled server error
   logger.error({ err: error, url: req.url, method: req.method }, 'Unhandled internal server error');
 

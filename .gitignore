@@ -10,3 +10,4 @@ build/
 *.log
 coverage/
 .DS_Store
+scratch_*.ts
