@@ -17,6 +17,7 @@ import {
   UpdateInvoiceInput,
   ListInvoicesQuery,
 } from './invoices.schemas.js';
+import { isAssetAllowed } from '../../stellar/config.js';
 
 export class InvoicesService {
   /**
@@ -219,6 +220,15 @@ export class InvoicesService {
       throw Errors.notFound('Merchant not found.');
     }
 
+    // 2.5 Verify asset is permitted on allowlist
+    const assetCode = input.assetCode.toUpperCase().trim();
+    if (!isAssetAllowed(assetCode, input.assetIssuer, input.tokenContractId)) {
+      throw Errors.unprocessableEntity(
+        `Asset "${assetCode}" is not permitted under the configured asset allowlist.`,
+        'ASSET_NOT_ALLOWED'
+      );
+    }
+
     // 3. Resolve invoice number
     let invoiceNumber = input.invoiceNumber?.trim();
     if (!invoiceNumber) {
@@ -360,6 +370,17 @@ export class InvoicesService {
         throw Errors.validation('Specified client does not exist or does not belong to merchant.');
       }
       client = newClient;
+    }
+
+    // Verify asset is permitted on allowlist if changing
+    const targetAssetCode = (input.assetCode || existing.assetCode).toUpperCase().trim();
+    const targetAssetIssuer = input.assetIssuer !== undefined ? input.assetIssuer : existing.assetIssuer;
+    const targetTokenId = input.tokenContractId !== undefined ? input.tokenContractId : existing.tokenContractId;
+    if (!isAssetAllowed(targetAssetCode, targetAssetIssuer, targetTokenId)) {
+      throw Errors.unprocessableEntity(
+        `Asset "${targetAssetCode}" is not permitted under the configured asset allowlist.`,
+        'ASSET_NOT_ALLOWED'
+      );
     }
 
     // Prepare line items

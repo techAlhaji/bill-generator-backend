@@ -23,7 +23,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify(
     env.NODE_ENV === 'test'
       ? { logger: false }
-      : { loggerInstance: logger as FastifyBaseLogger }
+      : {
+          loggerInstance: logger as FastifyBaseLogger,
+          trustProxy: env.NODE_ENV === 'production',
+        }
   );
 
   // 1. Centralized Error Handler
@@ -47,16 +50,43 @@ export async function buildApp(): Promise<FastifyInstance> {
     contentSecurityPolicy: false, // Allow API consumers and public pay portal iframes
   });
 
+  // Assemble allowed CORS origins from FRONTEND_URL and CORS_ORIGIN
+  const allowedOrigins: string[] = [
+    env.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+  if (env.CORS_ORIGIN) {
+    const additional = env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean);
+    allowedOrigins.push(...additional);
+  }
+
   await app.register(cors, {
-    origin: [env.FRONTEND_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: (origin, cb) => {
+      // Allow requests with no origin (e.g. server-to-server, curl, tests)
+      if (!origin) return cb(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        allowedOrigins.includes('*') ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      ) {
+        return cb(null, true);
+      }
+      // Allow vercel preview deployment patterns if FRONTEND_URL contains vercel.app
+      if (env.FRONTEND_URL.includes('.vercel.app') && origin.endsWith('.vercel.app')) {
+        return cb(null, true);
+      }
+      cb(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
   await app.register(rateLimit, {
-    max: 100,
-    timeWindow: '1 minute',
+    max: env.RATE_LIMIT_MAX,
+    timeWindow: env.RATE_LIMIT_TIME_WINDOW,
   });
 
   // 3. Authentication Plugin

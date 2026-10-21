@@ -103,6 +103,14 @@ export const Errors = {
       invalidParams,
     });
   },
+  unprocessableEntity(detail: string, code = 'UNPROCESSABLE_ENTITY') {
+    return new AppError({
+      status: 422,
+      code,
+      title: 'Unprocessable Entity',
+      detail,
+    });
+  },
   upstreamRpc(detail = 'Failed to communicate with Stellar Horizon or Soroban RPC.') {
     return new AppError({
       status: 502,

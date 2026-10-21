@@ -22,6 +22,10 @@ const envSchema = z.object({
     .string()
     .regex(/^S[A-Z2-7]{55}$/, 'Invalid Stellar secret key format')
     .optional(),
+  ASSET_ALLOWLIST: z.string().default('*'),
+  CORS_ORIGIN: z.string().optional(),
+  RATE_LIMIT_MAX: z.coerce.number().default(100),
+  RATE_LIMIT_TIME_WINDOW: z.string().default('1 minute'),
 });
 
 export type Env = z.infer<typeof envSchema>;

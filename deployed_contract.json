@@ -1,0 +1,16 @@
+{
+  "network": "Stellar Testnet",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "horizonUrl": "https://horizon-testnet.stellar.org",
+  "contractName": "InvoiceRegistry",
+  "contractId": "CCG6V5QEJZ2QI7EXIRVQXCHUIFUROXUBMZPTSCRJHOO35CAQ2HZ6IJGC",
+  "wasmHash": "258688c77041da6696b4dab6a3328fb00871659d54df09cc235282b260cdf2a8",
+  "deployerAddress": "GCF7FGZJ6LVPAWFNANXZH7ANA42G5JII5F2UXXAL3WHQ26ZFXYTE73JM",
+  "creationTxHash": "c0ddc3dc00868055e7765af4c40ccbaa4f951447e8015e246337a3870d269d86",
+  "initTxHash": "e1e0b095ec6471f0f91a1c20a2f7851e6396e389018238d3a0ace977300ec62d",
+  "uploadTxHash": "b0e2c3dd8a392dab5d50f1fef980a0506f91f67b63c429810d4008b01f7d5897",
+  "verifiedAdmin": "GCF7FGZJ6LVPAWFNANXZH7ANA42G5JII5F2UXXAL3WHQ26ZFXYTE73JM",
+  "explorerUrl": "https://stellar.expert/explorer/testnet/contract/CCG6V5QEJZ2QI7EXIRVQXCHUIFUROXUBMZPTSCRJHOO35CAQ2HZ6IJGC",
+  "deployedAt": "2026-10-21T16:56:01.761Z"
+}
