@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -23,7 +23,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify(
     env.NODE_ENV === 'test'
       ? { logger: false }
-      : { loggerInstance: logger }
+      : { loggerInstance: logger as FastifyBaseLogger }
   );
 
   // 1. Centralized Error Handler
