@@ -1,186 +1,168 @@
-# Stellar Bill Generator — Backend REST API
+<p align="center">
+  <img src="https://raw.githubusercontent.com/techAlhaji/bill-generator-frontend/main/public/images/banner.png" alt="StellarBills Logo" width="640" onerror="this.style.display='none'" />
+</p>
 
-Production-grade TypeScript & Node.js backend engine for the **Stellar Bill Generator** platform. Engineered for high-throughput invoice lifecycle management, RFC 8785 canonical content hashing, tamper-evident PDF generation, and hybrid cryptographic payment settlement verification across Stellar Classic L1 (Horizon) and Soroban Smart Contracts (Protocol 22 RPC).
+<h1 align="center">StellarBills — Backend REST API</h1>
+
+<p align="center">
+  <strong>Production-grade Fastify TypeScript backend engine, cryptographic payment verification service, and PDF invoicing pipeline for Stellar.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/techAlhaji/bill-generator-backend/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/techAlhaji/bill-generator-backend/ci.yml?branch=main&label=CI%20Build" alt="CI Build" />
+  </a>
+  <img src="https://img.shields.io/badge/Node.js-v24%2B-green.svg" alt="Node.js v24+" />
+  <img src="https://img.shields.io/badge/TypeScript-5.7%2B-blue.svg" alt="TypeScript 5.7+" />
+  <img src="https://img.shields.io/badge/Fastify-v5-black.svg" alt="Fastify v5" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-teal.svg" alt="Prisma ORM" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-blue.svg" alt="PostgreSQL 16" />
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License" />
+  </a>
+</p>
 
 ---
 
-## 1. Architecture & Technology Stack
+## 1. What is StellarBills Backend?
 
-| Domain | Technology Selection | Rationale & Architectural Decisions |
+The **StellarBills Backend API** powers commercial invoicing, CRM directory management, PDF generation, and automated cryptographic payment reconciliation on Stellar. 
+
+### Core Architectural Capabilities
+- **Hybrid Cryptographic Payment Verification:** Zero-trust payment verification connecting directly to **Stellar Horizon** (for Stellar Classic payments) and **Soroban RPC** (for Protocol 22 smart contract payments). Frontend payment confirmation signals are never trusted.
+- **Zero Floating-Point Arithmetic:** All quantities are scaled by integer factor $10^4$ and prices/balances are stored strictly in integer base minor units (stroops or cents) using native `BigInt` to eliminate rounding errors.
+- **RFC 8785 Canonical Hashing:** Computes deterministic SHA-256 digests of canonical invoice JSON matching on-chain Soroban commitments.
+- **Tamper-Evident Vector PDF Invoices:** Built-in PDFKit vector generator rendering print-ready commercial invoices with embedded QR codes and payment metadata.
+- **RFC 7807 Problem Details:** Unified `application/problem+json` error reporting across all endpoints.
+
+---
+
+## 2. Maintainers
+
+| Avatar | Maintainer | Role | Contact |
+| :---: | :--- | :--- | :--- |
+| <img src="https://github.com/techAlhaji.png" width="48" height="48" style="border-radius:50%;" /> | **Ademola (@techAlhaji)** | Lead Backend Engineer | [`ademolabuild@gmail.com`](mailto:ademolabuild@gmail.com) / GitHub: [@techAlhaji](https://github.com/techAlhaji) |
+
+---
+
+## 3. Technology Stack & Architecture
+
+| Layer | Technology | Details |
 | :--- | :--- | :--- |
-| **Runtime & Language** | **Node.js v24+ & TypeScript 5.7+** | Native ES modules (`"type": "module"`), strict static type checking, ECMAScript 2022+ primitives. |
-| **HTTP Framework** | **Fastify v5** | Low-overhead, asynchronous request pipeline with plugins for CORS, Helmet security headers, rate limiting, and JWT authentication. |
-| **Database & ORM** | **PostgreSQL 16+ & Prisma ORM** | Strict ACID transaction guarantees, row-level locks for payment verification, declarative migrations, and unique constraints for replay prevention. |
-| **API Boundary Validation** | **Zod v3** | Strict schema validation on all inputs; custom regex for Stellar addresses (`G...`), transaction hashes, and UUIDs. |
-| **Zero-Float Monetary Math** | **Native BigInt Minor Units** | Floating-point arithmetic is strictly prohibited. Quantities are scaled by $10^4$ and prices/balances are tracked in base minor units (stroops/cents). |
-| **Canonical Hashing** | **RFC 8785 (JCS) & SHA-256** | Deterministic JSON canonicalization ensuring on-chain content digests match across heterogeneous environments. |
-| **PDF Generation** | **PDFKit** | High-resolution, tamper-evident vector PDF invoice generation with payment metadata and status badges. |
-| **Error Handling** | **RFC 7807 Problem Details** | Standardized `application/problem+json` error responses across all 4xx/5xx responses. |
-| **Logging** | **Pino** | Structured JSON logging with automatic redacting of secrets, passwords, private keys, and authorization headers. |
-| **Test Suite** | **Vitest** | Fast, modern automated testing with native TypeScript execution and in-memory Fastify request injection. |
+| **HTTP Framework** | Fastify v5 | Schema validation, Helmet security headers, CORS, rate-limiting, Pino logging |
+| **Database & ORM** | PostgreSQL 16 + Prisma | ACID serializable transactions, row-level locks, replay prevention |
+| **Authentication** | JWT & Stellar SEP-10 | Dual authentication supporting password or Web3 cryptographic wallet challenges |
+| **Blockchain Clients** | `@stellar/stellar-sdk` | Horizon REST client, Soroban RPC client, XDR transaction decoders |
+| **Validation** | Zod v3 | Strict boundary validation for addresses, hashes, UUIDs, and quantities |
+| **Testing** | Vitest | Integration and unit testing with native TypeScript execution |
 
 ---
 
-## 2. Directory Structure
+## 4. Key API Endpoints
+
+The API is fully documented in [`openapi.yaml`](./openapi.yaml):
+
+| Method | Endpoint | Access | Purpose |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Public | Merchant onboarding with email or Stellar address |
+| `POST` | `/api/v1/auth/login` | Public | Standard JWT credentials authentication |
+| `POST` | `/api/v1/auth/challenge` | Public | Initiates non-custodial SEP-10 wallet challenge |
+| `POST` | `/api/v1/auth/verify-challenge` | Public | Verifies wallet signature and issues session |
+| `GET` | `/api/v1/invoices` | Protected | Lists merchant invoices with filters and pagination |
+| `POST` | `/api/v1/invoices` | Protected | Creates draft invoice with line items and math validation |
+| `POST` | `/api/v1/invoices/:id/issue` | Protected | Issues invoice, creates capability URL, anchors hash |
+| `GET` | `/api/v1/invoices/:id/pdf` | Protected | Generates high-resolution vector PDF invoice |
+| `GET` | `/api/v1/public/invoices/:token` | Public | Sanitized payer view (scrubs internal IDs & notes) |
+| `POST` | `/api/v1/public/invoices/:token/verify-payment` | Public | Cryptographic payment settlement verification |
+
+---
+
+## 5. Quick-Start & Local Setup
+
+### Prerequisites
+- Node.js v22+ or v24+
+- PostgreSQL 15+ (local or containerized)
+
+```bash
+# 1. Clone repository
+git clone https://github.com/techAlhaji/bill-generator-backend.git
+cd bill-generator-backend
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment
+cp .env.example .env
+# Update DATABASE_URL in .env: postgresql://user:password@localhost:5432/bill_generator
+
+# 4. Run Prisma database migrations
+npm run prisma:generate
+npm run prisma:migrate:dev
+
+# 5. Start development server
+npm run dev
+
+# 6. Run test suite
+npm test
+```
+
+---
+
+## 6. Directory Structure
 
 ```
 bill-generator-backend/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml               # Automated CI (lint, build, migrate, test)
+│       └── ci.yml               # Automated build, PostgreSQL service, migrate & test
 ├── docs/
-│   ├── INTEGRATION_SPEC.md      # Backend REST API integration specification
-│   └── PAYMENT_VERIFICATION_DESIGN.md # Deep dive on verification engine & limitations
+│   ├── INTEGRATION_SPEC.md      # Detailed REST API specification
+│   └── PAYMENT_VERIFICATION_DESIGN.md # Zero-trust cryptographic verification guide
 ├── prisma/
-│   ├── schema.prisma            # PostgreSQL relational schema
+│   ├── schema.prisma            # Relational PostgreSQL schema
 │   └── migrations/              # Applied SQL migrations
+├── scripts/
+│   └── create_issues.sh         # gh script for automated community issue creation
 ├── src/
-│   ├── config/                  # Environment validation via Zod
-│   ├── db/                      # PrismaClient singleton & BigInt JSON serialization
-│   ├── errors/                  # RFC 7807 problem details error classes & handler
-│   ├── logger/                  # Pino structured logging with redaction
-│   ├── middlewares/             # JWT authentication hooks & merchant context
-│   ├── modules/                 # Modular business logic domains
-│   │   ├── auth/                # Password & Web3 SEP-10 authentication
-│   │   ├── clients/             # Client CRM directory
-│   │   ├── invoices/            # Invoice lifecycle state machine & numbering
-│   │   ├── merchant/            # Merchant settings & profile
-│   │   ├── payment/             # Cryptographic payment verification engine
+│   ├── config/                  # Environment validation
+│   ├── db/                      # PrismaClient singleton & BigInt serializer
+│   ├── errors/                  # RFC 7807 problem details
+│   ├── logger/                  # Pino structured logging
+│   ├── modules/
+│   │   ├── auth/                # Dual auth (Password & SEP-10)
+│   │   ├── clients/             # CRM client directory
+│   │   ├── invoices/            # Invoicing state machine & canonical hash
+│   │   ├── merchant/            # Merchant profile & settings
+│   │   ├── payment/             # Hybrid Horizon & Soroban verification
 │   │   └── public/              # Sanitized public payer capability portal
-│   ├── routes/                  # Fastify route declarations (/api/v1)
-│   ├── stellar/                 # Horizon and Soroban RPC clients & config
-│   ├── utils/                   # Zero-float math, canonical hashing, PDF generator
-│   ├── app.ts                   # Fastify app factory with plugin registrations
-│   └── index.ts                 # Server entrypoint and graceful shutdown
-├── tests/                       # Automated unit and integration test suite
-│   ├── unit/                    # Monetary math, canonical hash, PDF tests
-│   └── integration/             # Health, Auth, Clients, Invoices, Payment tests
-├── .env.example                 # Example environment template with placeholders
+│   ├── routes/                  # Route declarations (/api/v1)
+│   ├── stellar/                 # Horizon and Soroban RPC clients
+│   └── utils/                   # Zero-float math, canonical hashing, PDFKit
 ├── openapi.yaml                 # Complete OpenAPI 3.0.3 specification
-├── package.json
-└── tsconfig.json
+├── CONTRIBUTING.md              # Issue claiming workflow (.take) and guidelines
+├── SECURITY.md                  # Responsible disclosure policy and disclaimer
+└── README.md
 ```
 
 ---
 
-## 3. Local Development Setup
+## 7. Contributing & Security
 
-### 3.1 Prerequisites
-- **Node.js:** v24.0.0 or higher
-- **npm:** v10.0.0 or higher
-- **PostgreSQL:** v15+ running locally (e.g. on `localhost:5432`)
-
-### 3.2 Installation
-```bash
-# Clone and enter backend directory
-cd bill-generator-backend
-
-# Install dependencies
-npm install
-```
-
-### 3.3 Environment Configuration
-Copy the template environment file:
-```bash
-cp .env.example .env
-```
-Edit `.env` to configure your local PostgreSQL database URL and secrets:
-```ini
-PORT=4000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:3000
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bill_generator?schema=public
-JWT_SECRET=super-secret-development-jwt-key-replace-in-prod-min-32-chars
-JWT_EXPIRES_IN=7d
-STELLAR_NETWORK=TESTNET
-STELLAR_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-HORIZON_URL=https://horizon-testnet.stellar.org
-SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
-INVOICE_REGISTRY_CONTRACT_ID=CCG6V5QEJZ2QI7EXIRVQXCHUIFUROXUBMZPTSCRJHOO35CAQ2HZ6IJGC
-SERVER_SIGNER_SECRET_KEY=SC6WBWPGSIELKLKKRCY5GOIIF3JIJTS2GDKSJD7K6M6MHR3G3RI7EXYP
-```
-
-### 3.4 Database Migrations
-Apply Prisma migrations to initialize database tables:
-```bash
-# Generate Prisma Client
-npm run prisma:generate
-
-# Apply migrations
-npm run prisma:migrate
-```
+- **Contributing:** Read [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting code. We enforce `.take` issue assignments and conventional commits.
+- **Security:** Review [SECURITY.md](./SECURITY.md) for vulnerability reporting procedures.
 
 ---
 
-## 4. Running the Application
+## 8. Contributors
 
-### 4.1 Development Server
-Starts the Fastify server with hot-reload via `tsx`:
-```bash
-npm run dev
-```
-The server will boot at `http://localhost:4000`.
+Thanks to all contributors building with StellarBills!
 
-### 4.2 Production Build
-```bash
-# Compile TypeScript to JavaScript in dist/
-npm run build
-
-# Start production server
-npm start
-```
+<a href="https://github.com/techAlhaji/bill-generator-backend/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=techAlhaji/bill-generator-backend" alt="Contributors" />
+</a>
 
 ---
 
-## 5. Automated Testing
+## 9. License
 
-The repository contains an automated test suite with **56 unit and integration tests** covering monetary mathematics, canonical RFC 8785 hashing, PDF rendering, authentication, client CRM, invoice state transitions, and payment verification with idempotency protection.
-
-```bash
-# Run all tests once
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with code coverage report
-npm run test:coverage
-```
-
----
-
-## 6. API Documentation & Endpoints
-
-The complete OpenAPI 3.0.3 specification is located in [`openapi.yaml`](./openapi.yaml) and served dynamically:
-- Raw OpenAPI YAML: `GET http://localhost:4000/api/v1/openapi.yaml`
-
-### Key Endpoint Groups
-
-| Group | Method & Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| **Health** | `GET /health` | Public | Liveness probe (`{ "status": "ok" }`). |
-| | `GET /health/ready` | Public | Readiness probe checking PostgreSQL, Horizon, and Soroban RPC. |
-| **Auth** | `POST /api/v1/auth/register` | Public | Register merchant account (email, password, businessName, stellarAddress). |
-| | `POST /api/v1/auth/login` | Public | Authenticate merchant credentials and receive signed JWT. |
-| | `POST /api/v1/auth/stellar-challenge` | Public | Generate SEP-10 Web3 challenge transaction for Freighter. |
-| | `POST /api/v1/auth/stellar-verify` | Public | Verify signed challenge transaction and issue session JWT. |
-| **Merchant**| `GET /api/v1/merchant/profile` | Bearer JWT | Retrieve merchant profile and Stellar address settings. |
-| | `PUT /api/v1/merchant/profile` | Bearer JWT | Update business name, receiving address, and branding. |
-| **Clients** | `GET /api/v1/clients` | Bearer JWT | List merchant's clients with pagination and search. |
-| | `POST /api/v1/clients` | Bearer JWT | Create new client record. |
-| | `GET /api/v1/clients/:id` | Bearer JWT | Retrieve client details. |
-| | `PUT /api/v1/clients/:id` | Bearer JWT | Update client contact information. |
-| | `DELETE /api/v1/clients/:id` | Bearer JWT | Delete client (prohibited if active invoices exist). |
-| **Invoices**| `GET /api/v1/invoices` | Bearer JWT | List invoices with status, client, and currency filters. |
-| | `POST /api/v1/invoices` | Bearer JWT | Create draft invoice with zero-float integer calculations. |
-| | `GET /api/v1/invoices/:id` | Bearer JWT | Get full invoice breakdown including line items and audit log. |
-| | `PUT /api/v1/invoices/:id` | Bearer JWT | Update draft invoice (prohibited once issued or paid). |
-| | `POST /api/v1/invoices/:id/issue` | Bearer JWT | Transition `DRAFT` $\to$ `ISSUED`, lock RFC 8785 hash. |
-| | `POST /api/v1/invoices/:id/cancel` | Bearer JWT | Cancel invoice (prohibited if already paid). |
-| | `GET /api/v1/invoices/:id/pdf` | Bearer JWT | Stream vector PDF invoice binary. |
-| | `GET /api/v1/invoices/:id/payments` | Bearer JWT | Retrieve payment attempts and settlement history. |
-| | `GET /api/v1/invoices/:id/audit-logs`| Bearer JWT | Immutable audit trail for invoice. |
-| **Public** | `GET /api/v1/public/invoices/:token` | Capability | Sanitized invoice view (strips PII & merchant notes; 404 for drafts). |
-| | `POST /api/v1/public/invoices/:token/verify-payment` | Capability | Cryptographically verify Stellar Classic / Soroban payment. |
-| | `GET /api/v1/public/invoices/:token/status` | Capability | Lightweight status polling endpoint (`DRAFT`, `ISSUED`, `PAID`, `OVERDUE`). |
-| | `GET /api/v1/public/invoices/:token/pdf` | Capability | Download public PDF invoice or payment receipt. |
+This repository is licensed under the [Apache License 2.0](./LICENSE).
