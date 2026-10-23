@@ -17,10 +17,15 @@
   <img src="https://img.shields.io/badge/Fastify-v5-black.svg" alt="Fastify v5" />
   <img src="https://img.shields.io/badge/Prisma-ORM-teal.svg" alt="Prisma ORM" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-blue.svg" alt="PostgreSQL 16" />
+  <a href="https://techalhaji.github.io/bill-generator-frontend/">
+    <img src="https://img.shields.io/badge/Docs-StellarBills%20Portal-00E5FF?style=flat&logo=gitbook&logoColor=white" alt="Unified Documentation Portal" />
+  </a>
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License" />
   </a>
 </p>
+
+> 📖 **Live Documentation Portal:** Interactive OpenAPI explorer, hybrid verification engine specifications, and database recovery runbooks are hosted at **[https://techalhaji.github.io/bill-generator-frontend/](https://techalhaji.github.io/bill-generator-frontend/)**.
 
 ---
 
