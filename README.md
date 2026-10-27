@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/techAlhaji/bill-generator-frontend/main/public/images/banner.png" alt="StellarBills Logo" width="640" onerror="this.style.display='none'" />
+  <img src="https://raw.githubusercontent.com/techAlhaji/bill-generator-frontend/main/docs/assets/logo.svg" alt="StellarBills Logo" width="100" height="100" />
 </p>
 
 <h1 align="center">StellarBills — Backend REST API</h1>
